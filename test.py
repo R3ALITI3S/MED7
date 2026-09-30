@@ -1,7 +1,7 @@
 import asyncio
 import time
 from pprint import pprint
-
+import cv2
 from g3pylib import connect_to_glasses
 
 
@@ -10,96 +10,129 @@ HOSTNAME = "192.168.75.51"
 
 
 async def main():
-    # Connect to the G3 glasses, receive gaze data for 5 seconds, and print the received gaze samples to the console.
-    # Establish an asynchronous connection to the glasses.
-    # The connection is automatically closed when leaving this block.
     async with connect_to_glasses.with_hostname(HOSTNAME) as g3:
 
-        # Print a header to confirm that the connection was established.
         print("=" * 70)
         print(f"Connected to glasses: {HOSTNAME}")
         print("=" * 70)
 
-        # Open the real-time RTSP streams.
-        # scene_camera=False:
-        #     We do not need the scene camera stream.
-        # gaze=True:
-        #     Enable the gaze data stream.
-        async with g3.stream_rtsp(scene_camera=True, gaze=True) as streams:
+        # Enable the scene camera and gaze streams.
+        async with g3.stream_rtsp(
+            scene_camera=True,
+            gaze=True,
+        ) as streams:
 
-            # Decode the incoming gaze stream into Python objects.
-            async with streams.gaze.decode() as gaze_stream:
+            # Decode the scene camera.
+            async with streams.scene_camera.decode() as video_stream:
 
-                # Record the start time so that we can stop after 5 seconds.
-                start = time.monotonic()
+                # Decode gaze data.
+                async with streams.gaze.decode() as gaze_stream:
 
-                # Used to identify and print the first raw gaze packet.
-                first_packet = True
+                    print("Live feed started.")
+                    print("Press Q in the video window to quit.")
 
-                # Counter for the total number of gaze samples received.
-                samples = 0
+                    latest_gaze = None
+                    latest_gaze_timestamp = None
 
-                # Continue receiving gaze data for approximately 5 seconds.
-                while time.monotonic() - start < 5:
+                    samples = 0
+                    start = time.monotonic()
 
-                    # Wait asynchronously for the next gaze packet.
-                    # gaze:
-                    #     Dictionary containing the gaze information.
-                    # timestamp:
-                    #     Timestamp associated with the received sample.
-                    gaze, timestamp = await gaze_stream.get()
+                    while True:
 
-                    # Increment the number of received samples.
-                    samples += 1
+                        # Get the next camera frame
+                        frame, timestamp = await video_stream.get()
 
-                    # Print the first raw packet in full.
-                    # This is useful for discovering the structure and available fields in the gaze data.
-                    if first_packet:
-                        print("\nFIRST RAW GAZE PACKET:")
-                        pprint(gaze, sort_dicts=False)
-                        print("\n" + "-" * 70)
+                        # Convert the decoded frame to an OpenCV image.
+                        image = frame.to_ndarray(format="bgr24")
 
-                        # Make sure this block only runs once.
-                        first_packet = False
+                        # Don't want gaze reception to block the video.
+                        try:
+                            gaze, gaze_timestamp = await asyncio.wait_for(
+                                gaze_stream.get(),
+                                timeout=0.001,
+                            )
 
-                    # Print basic information about the current sample.
-                    print(f"\nSample #{samples}")
-                    print(f"  timestamp : {timestamp}")
+                            if gaze:
+                                latest_gaze = gaze
+                                latest_gaze_timestamp = gaze_timestamp
+                                samples += 1
 
-                    # A gaze packet may be empty or None.
-                    # Handle that case before attempting to access its fields.
-                    if not gaze:
-                        print("  gaze      : None")
-                        continue
+                        except asyncio.TimeoutError:
+                            pass
 
-                    # Display all available field names in the gaze packet.
-                    print(f"  fields    : {list(gaze.keys())}")
+                        # Draw gaze information on the video - red dot
+                        if latest_gaze:
+                            gaze2d = latest_gaze.get("gaze2d")
 
-                    # Try to retrieve the 2D gaze position.
-                    # "gaze2d" commonly represents the normalized gaze
-                    # coordinates, if that field is provided by the glasses.
-                    gaze2d = gaze.get("gaze2d")
+                            if gaze2d is not None:
+                                # Gaze coordinates are normally normalized:
+                                # x = 0..1
+                                # y = 0..1
+                                gx, gy = gaze2d
 
-                    # Print the 2D gaze coordinates when available.
-                    if gaze2d is not None:
-                        print(f"  gaze2d    : {gaze2d}")
-                    else:
-                        print("  gaze2d    : None")
+                                height, width = image.shape[:2]
 
-                    # Print every other field contained in the gaze packet.
-                    # We skip "gaze2d" because it was already printed above.
-                    # This also makes the script automatically display new fields if the glasses provide additional gaze data.
-                    for key, value in gaze.items():
-                        if key != "gaze2d":
-                            print(f"  {key:<10}: {value}")
+                                # Convert normalized coordinates to pixels.
+                                px = int(gx * width)
+                                py = int(gy * height)
 
-        # Print a summary after the gaze stream has finished.
-        print("\n" + "=" * 70)
-        print(f"Done — {samples} samples received.")
-        print("=" * 70)
+                                # Draw a circle at the gaze position.
+                                cv2.circle(
+                                    image,
+                                    (px, py),
+                                    15,
+                                    (0, 0, 255),
+                                    -1,
+                                )
+
+                                # Draw a small label.
+                                cv2.putText(
+                                    image,
+                                    f"Gaze: ({gx:.3f}, {gy:.3f})",
+                                    (20, 40),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.8,
+                                    (0, 255, 0),
+                                    2,
+                                )
+
+                                cv2.putText(
+                                    image,
+                                    f"timestamps: ({timestamp})",
+                                    (20, 80),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.8,
+                                    (0, 255, 0),
+                                    2,
+                                )
+
+                        # Display timestamp
+                        cv2.putText(
+                            image,
+                            f"Timestamp: {timestamp}",
+                            (20, image.shape[0] - 20),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.6,
+                            (255, 255, 255),
+                            2,
+                        )
+
+                        # Show live video
+                        cv2.imshow("Glasses3 Live Feed", image)
+
+                        # OpenCV requires waitKey for the window to update.
+                        key = cv2.waitKey(1) & 0xFF
+
+                        if key == ord("q"):
+                            break
+
+                    cv2.destroyAllWindows()
+
+                    print("\n" + "=" * 70)
+                    print("Live feed stopped.")
+                    print(f"Gaze samples received: {samples}")
+                    print("=" * 70)
 
 
-# Run the asynchronous main() function when this file is executed directly.
 if __name__ == "__main__":
     asyncio.run(main())
-
