@@ -11,6 +11,10 @@ from g3pylib import connect_to_glasses
 # IP address / hostname of the G3 glasses.
 HOSTNAME = "192.168.75.51"
 
+# Folder where all participant CSVs will be saved.
+OUTPUT_DIR = "Data"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 # Name of the CSV file that will be created.
 test_number = 1
 while os.path.exists(f"participant_{test_number}.csv"):
