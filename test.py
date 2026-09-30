@@ -29,18 +29,14 @@ async def main():
 
             # Decode the incoming gaze stream into Python objects.
             async with streams.gaze.decode() as gaze_stream:
-
-                # Record the start time so that we can stop after 5 seconds.
-                start = time.monotonic()
-
                 # Used to identify and print the first raw gaze packet.
                 first_packet = True
 
                 # Counter for the total number of gaze samples received.
                 samples = 0
 
-                # Continue receiving gaze data for approximately 5 seconds.
-                while time.monotonic() - start < 5:
+                # Continue receiving gaze data untill the script is stopped.
+                while True:
 
                     # Wait asynchronously for the next gaze packet.
                     # gaze:
