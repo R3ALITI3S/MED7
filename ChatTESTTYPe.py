@@ -3,6 +3,7 @@ import time
 import csv
 import json
 from pprint import pprint
+import os
 
 from g3pylib import connect_to_glasses
 
@@ -11,8 +12,10 @@ from g3pylib import connect_to_glasses
 HOSTNAME = "192.168.75.51"
 
 # Name of the CSV file that will be created.
-CSV_FILE = "gaze_data.csv"
-
+test_number = 1
+while os.path.exists(f"participant_{test_number}.csv"):
+    test_number += 1
+CSV_FILE = f"participant_{test_number}.csv"
 
 async def main():
 
