@@ -14,9 +14,9 @@ FIXED_DATA_DIR = PROJECT_DIR / "FixedData"
 FIXED_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # Change this to the actual filename of your raw CSV
-INPUT_FILE = RAW_DATA_DIR / "gaze_all.csv"
+INPUT_FILE = RAW_DATA_DIR / "Participant_6_GZ.csv"
 
-OUTPUT_FILE = FIXED_DATA_DIR / "gaze_data_fixed.csv"
+OUTPUT_FILE = FIXED_DATA_DIR / "Participant_6_GZ_Fixed.csv"
 
 EXPECTED_COLUMNS = [
     "type", "timestamp",
