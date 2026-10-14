@@ -5,7 +5,7 @@ import pandas as pd
 
 #From page 87 in the ML book
 
-def load_gaze_data(root=".", filename="gazedata.gz"):
+def load_gaze_data(root="RawData", filename="gazedata.gz"):
     """Load every gazedata.gz found under `root` into one DataFrame.
 
             Each recording folder is treated as one participant, and the folder name
