@@ -1,0 +1,83 @@
+from pathlib import Path
+import pandas as pd
+
+# --------------------------------------------------
+# 1. Define folder paths
+# --------------------------------------------------
+
+# Folder containing this script (Processing)
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+# Parent folder containing Processing, Raw Data, and Fixed Data
+PROJECT_DIR = SCRIPT_DIR.parent
+
+RAW_DATA_DIR = PROJECT_DIR / "RawData"
+FIXED_DATA_DIR = PROJECT_DIR / "FixedData"
+
+# Create the output folder if it doesn't exist
+FIXED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# --------------------------------------------------
+# 2. Define input and output files
+# --------------------------------------------------
+
+# Change this to the actual filename of your raw CSV
+INPUT_FILE = RAW_DATA_DIR / "gaze_data.csv"
+
+OUTPUT_FILE = FIXED_DATA_DIR / "gaze_data_fixed.csv"
+
+# --------------------------------------------------
+# 3. Define expected gaze features
+# --------------------------------------------------
+
+EXPECTED_COLUMNS = [
+    "type",
+    "timestamp",
+    "gaze2d",
+    "gaze3d",
+    "eyeleft.gazeorigin",
+    "eyeleft.gazedirection",
+    "eyeleft.pupildiameter",
+    "eyeright.gazeorigin",
+    "eyeright.gazedirection",
+    "eyeright.pupildiameter",
+]
+
+# --------------------------------------------------
+# 4. Load the raw CSV
+# --------------------------------------------------
+
+if not INPUT_FILE.exists():
+    raise FileNotFoundError(
+        f"Input file not found: {INPUT_FILE}\n"
+        "Check the filename and the Raw Data folder."
+    )
+
+df = pd.read_csv(INPUT_FILE)
+
+print(f"Loaded {len(df)} rows from {INPUT_FILE}")
+
+# --------------------------------------------------
+# 5. Add missing feature columns
+# --------------------------------------------------
+
+for column in EXPECTED_COLUMNS:
+    if column not in df.columns:
+        df[column] = pd.NA
+        print(f"Added missing column: {column}")
+
+# --------------------------------------------------
+# 6. Replace missing values with 'null'
+# --------------------------------------------------
+
+# Handle empty cells and common missing-value markers
+df = df.fillna("null")
+
+# --------------------------------------------------
+# 7. Save the cleaned CSV
+# --------------------------------------------------
+
+df.to_csv(OUTPUT_FILE, index=False)
+
+print(f"Finished cleaning {len(df)} rows.")
+print(f"Cleaned file saved to: {OUTPUT_FILE}")
