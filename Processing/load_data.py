@@ -47,7 +47,7 @@ def load_gaze_data(root=PROJECT_ROOT / "RawData", filename="gazedata"):
         df["gaze2d_y"] = g.where(ok).str[1]
 
         # Use the recording folder's name as the participant ID
-        df["participant"] = path.parent.name
+        df["participant"] = path.name
         frames.append(df)
 
     # Stop with a clear message if nothing was found (usually a wrong `root`)
