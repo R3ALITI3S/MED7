@@ -7,8 +7,9 @@ import os
 def calculate_velocity(x_g, y_g, dt):
     x_g = np.asarray(x_g, dtype=float)
     y_g = np.asarray(y_g, dtype=float)
-    dt = np.asarray(dt, dtype=float) #Delta t
+    dt = np.asarray(dt, dtype=float) # Delta t
 
+    # Equation 15 & 16
     v_x = (x_g[1:] - x_g[:-1]) / dt # selects all elements starting from index 1 (2nd element)
     v_y = (y_g[1:] - y_g[:-1]) / dt # selects all elements up to, but not including, the last element
 
@@ -20,6 +21,7 @@ def calculate_acceleration(v_x, v_y, dt):
     v_y = np.asarray(v_y, dtype=float)
     dt = np.asarray(dt[1:], dtype=float)  # acceleration uses dt between velocity samples
 
+    # Equation 17
     a = np.sqrt(
         (v_x[1:] - v_x[:-1])**2 +
         (v_y[1:] - v_y[:-1])**2
@@ -32,6 +34,7 @@ def calculate_amplitude(x_g, y_g):
     x_g = np.asarray(x_g, dtype=float)
     y_g = np.asarray(y_g, dtype=float)
 
+    # Equation 18
     A = np.sqrt(
         (np.max(x_g) - np.min(x_g))**2 +
         (np.max(y_g) - np.min(y_g))**2
@@ -41,7 +44,7 @@ def calculate_amplitude(x_g, y_g):
 
 # Get the fixed CSV file
 content_root = os.path.dirname(os.path.abspath(__file__))
-csv_path = os.path.join(content_root, "FixedData", "Participant_2_GZ_fixed.csv")
+csv_path = os.path.join(content_root, "FixedData", "Participant_1_GZ_fixed.csv")
 
 df = pd.read_csv(csv_path)
 
