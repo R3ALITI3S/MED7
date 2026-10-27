@@ -1,19 +1,77 @@
 import numpy as np
+import pandas as pd
+from pathlib import Path
 
+
+# ==========================================================
+# Load CSV
+# ==========================================================
+
+P = 6 # Participant number
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+csv_path = (
+    PROJECT_ROOT
+    / "FixedData"
+    / f"Participant_{P}_GZ_fixed.csv"
+)
+
+df = pd.read_csv(csv_path)
+
+
+# ==========================================================
+# Handle missing values
+# ==========================================================
+
+columns_to_interpolate = [
+    "timestamp",
+    "gaze2d_x",
+    "gaze2d_y",
+    "gaze3d_x",
+    "gaze3d_y",
+    "gaze3d_z",
+    "eyeleft.pupildiameter",
+    "eyeright.pupildiameter",
+    "eyeleft.gazeorigin_x",
+    "eyeleft.gazeorigin_y",
+    "eyeleft.gazeorigin_z",
+    "eyeleft.gazedirection_x",
+    "eyeleft.gazedirection_y",
+    "eyeleft.gazedirection_z",
+    "eyeright.gazeorigin_x",
+    "eyeright.gazeorigin_y",
+    "eyeright.gazeorigin_z",
+    "eyeright.gazedirection_x",
+    "eyeright.gazedirection_y",
+    "eyeright.gazedirection_z"
+]
+
+for col in columns_to_interpolate:
+    if col in df.columns:
+        df[col] = df[col].interpolate(method="linear")
+
+
+# ==========================================================
+# Extract arrays
+# ==========================================================
+
+t = df["timestamp"].to_numpy()
+dt = np.diff(t)
+
+x_g = df["gaze2d_x"].to_numpy()
+y_g = df["gaze2d_y"].to_numpy()
+
+left_dir_x = df["eyeleft.gazedirection_x"].to_numpy()
+left_dir_y = df["eyeleft.gazedirection_y"].to_numpy()
+left_dir_z = df["eyeleft.gazedirection_z"].to_numpy()
+
+
+# ==========================================================
+# Eye Tracking Framework
+# ==========================================================
 
 class EyeTrackingFramework:
-
-    ScreenDis = 300
-    MirokaiDis = 150
-
-    """
-    Implementation of equations Eq1-Eq39.
-    Angles are assumed to be in radians.
-    """
-
-    # ==========================================================
-    # Eq2-Eq3 : Rotation matrices
-    # ==========================================================
 
     @staticmethod
     def Rx(phi):
@@ -41,11 +99,7 @@ class EyeTrackingFramework:
 
     @staticmethod
     def rotation_matrix(psi, theta, phi):
-        """
-        Eq3
-        R = Rz(psi) @ Ry(theta) @ Rx(phi)
-        "@" is for matrix multiplication
-        """
+
         return (
             EyeTrackingFramework.Rz(psi)
             @ EyeTrackingFramework.Ry(theta)
@@ -54,143 +108,57 @@ class EyeTrackingFramework:
 
     @staticmethod
     def rotate_heading_vector(v0, psi, theta, phi):
-        """
-        Eq2
-        v_H = R * v_H(0)
-        """
-        R = EyeTrackingFramework.rotation_matrix(
-            psi, theta, phi
-        )
-        return R @ np.asarray(v0)
 
-    # ==========================================================
-    # Eq9-Eq10
-    # Head rotation angles from Euler angles
-    # ==========================================================
+        R = EyeTrackingFramework.rotation_matrix(
+            psi,
+            theta,
+            phi
+        )
+
+        return R @ np.asarray(v0)
 
     @staticmethod
     def alpha(psi, theta, phi):
-        """
-        Eq9
-        """
+
         numerator = (
-            np.sin(psi) * np.sin(theta) * np.sin(phi)
-            + np.cos(psi) * np.cos(phi)
+            np.sin(psi) *
+            np.sin(theta) *
+            np.sin(phi)
+            +
+            np.cos(psi) *
+            np.cos(phi)
         )
 
         denominator = (
-            np.cos(psi) * np.sin(theta) * np.sin(phi)
-            - np.sin(psi) * np.cos(phi)
+            np.cos(psi) *
+            np.sin(theta) *
+            np.sin(phi)
+            -
+            np.sin(psi) *
+            np.cos(phi)
         )
 
-        return np.pi / 2 - np.arctan2(
+        return np.pi/2 - np.arctan2(
             numerator,
             denominator
         )
 
     @staticmethod
     def beta(theta, phi):
-        """
-        Eq10
-        """
-        return np.pi / 2 - np.arccos(
-            np.cos(theta) * np.sin(phi)
-        )
 
-    # ==========================================================
-    # Eq6 and Eq8
-    # Head coordinates on screen
-    # ==========================================================
-
-    @staticmethod
-    def x_head(alpha, x_max, alpha_max):
-        """
-        Eq6
-        """
         return (
-            (x_max / 2)
-            / np.tan(alpha_max / 2)
-            * np.tan(alpha)
-        )
-
-    @staticmethod
-    def y_head(beta, alpha,
-               y_max,
-               beta_max):
-        """
-        Eq8
-        """
-        return (
-            (y_max / 2)
-            / (
-                np.tan(beta_max / 2)
-                * np.cos(alpha)
+            np.pi/2
+            -
+            np.arccos(
+                np.cos(theta)
+                *
+                np.sin(phi)
             )
-            * np.tan(beta)
         )
 
-    # ==========================================================
-    # Eq1, Eq11, Eq12
-    # Eye-in-space estimation
-    # ==========================================================
-
     @staticmethod
-    def eye_in_space(head_signal,
-                     eye_signal):
-        """
-        Eq1
-        S_G = S_H + S_E
-        
-        S_G: Sum of eye in space signal
-        S_H: Head in space signal
-        S_E: Eye in head signal
-        """
-        return head_signal + eye_signal
+    def velocity(x_gaze, y_gaze, dt):
 
-    @staticmethod
-    def gaze_coordinates(
-            x_head,
-            y_head,
-            x_eye,
-            y_eye):
-        """
-        Eq11-Eq12
-        """
-        x_gaze = x_head + x_eye
-        y_gaze = y_head + y_eye
-
-        return x_gaze, y_gaze
-
-    # ==========================================================
-    # Eq13-Eq14
-    # Object-in-space
-    # ==========================================================
-
-    @staticmethod
-    def object_in_space(
-            x_head, y_head,
-            x_obj, y_obj):
-        """
-        Object coordinates transformed
-        to global coordinates.
-        """
-        return (
-            x_head + x_obj,
-            y_head + y_obj
-        )
-
-    # ==========================================================
-    # Eq15-Eq17
-    # Velocity and acceleration
-    # ==========================================================
-
-    @staticmethod
-    def velocity(x_gaze,
-                 y_gaze,
-                 dt):
-        """
-        Eq15-Eq16
-        """
         vx = np.diff(x_gaze) / dt
         vy = np.diff(y_gaze) / dt
 
@@ -198,222 +166,241 @@ class EyeTrackingFramework:
 
     @staticmethod
     def acceleration(vx, vy, dt):
-        """
-        Eq17
-        """
+
         dvx = np.diff(vx)
         dvy = np.diff(vy)
 
-        return np.sqrt(
-            dvx**2 + dvy**2
-        ) / dt
-
-    # ==========================================================
-    # Eq18
-    # Saccade amplitude
-    # ==========================================================
+        return (
+            np.sqrt(
+                dvx**2 + dvy**2
+            )
+            /
+            dt[1:]
+        )
 
     @staticmethod
     def amplitude(x, y):
+
         return np.sqrt(
             (np.max(x) - np.min(x))**2
             +
             (np.max(y) - np.min(y))**2
         )
 
-    # ==========================================================
-    # Eq19-Eq20
-    # Eye Euclidean distance
-    # ==========================================================
-
     @staticmethod
     def eye_euclidean_distance(
-            x_gaze,
-            y_gaze):
-        """
-        Eq19
-        """
+        x_gaze,
+        y_gaze
+    ):
+
         dx = np.diff(x_gaze)
         dy = np.diff(y_gaze)
 
-        return np.sqrt(dx**2 + dy**2)
+        return np.sqrt(
+            dx**2 + dy**2
+        )
 
     @staticmethod
     def cluster_distance(ed_cluster):
-        """
-        Eq20
-        """
+
         return np.sum(ed_cluster)
 
-    # ==========================================================
-    # Eq21-Eq22
-    # Object Euclidean distance
-    # ==========================================================
-
     @staticmethod
-    def object_euclidean_distance(
-            x_objs,
-            y_objs):
-        """
-        Eq21
-        """
-        dx = np.diff(x_objs)
-        dy = np.diff(y_objs)
+    def gaze_std(
+        x_gaze,
+        y_gaze
+    ):
 
-        return np.sqrt(dx**2 + dy**2)
-
-    @staticmethod
-    def object_cluster_distance(
-            ed_cluster):
-        """
-        Eq22
-        """
-        return np.sum(ed_cluster)
-
-    # ==========================================================
-    # Eq23-Eq24
-    # Total achieved distance
-    # ==========================================================
-
-    @staticmethod
-    def total_distance(
-            d_cluster,
-            mean_direction):
-        """
-        Eq23, Eq24
-        """
-        d_cluster = np.asarray(d_cluster)
-        mean_direction = np.asarray(
-            mean_direction
-        )
-
-        return np.sum(
-            np.sqrt(
-                (d_cluster * np.cos(mean_direction))**2
-                +
-                (d_cluster * np.sin(mean_direction))**2
-            )
-        )
-
-    # ==========================================================
-    # Eq25-30
-    # Mean direction
-    # ==========================================================
-
-    @staticmethod
-    def mean_direction(
-            d_cluster,
-            m_cluster):
-        """
-        Returns Eq25-Eq27 values.
-        """
-
-        K = len(d_cluster)
-
-        x_m = np.sum(
-            d_cluster * np.cos(m_cluster)
-        ) / K
-
-        y_m = np.sum(
-            d_cluster * np.sin(m_cluster)
-        ) / K
-
-        m_total = np.arctan2(
-            y_m,
-            x_m
-        )
-
-        return x_m, y_m, m_total
-
-    # ==========================================================
-    # Eq31-Eq33
-    # Smooth pursuit decision
-    # ==========================================================
-
-    @staticmethod
-    def summation_signal(filter_outputs):
-        """
-        Eq31 / Eq32
-
-        shape:
-        (n_filters, n_samples)
-        """
-        return np.sum(
-            filter_outputs,
-            axis=0
-        )
-
-    @staticmethod
-    def binary_signal(signal):
-        return (signal >= 0).astype(int)
-
-    @staticmethod
-    def smooth_pursuit_decision(
-            s_eye,
-            s_obj):
-        """
-        Eq33
-        """
-        b_eye = (
-            EyeTrackingFramework
-            .binary_signal(s_eye)
-        )
-
-        b_obj = (
-            EyeTrackingFramework
-            .binary_signal(s_obj)
-        )
-
-        b = b_obj - b_eye
-
-        smooth_pursuit = b >= 0
-
-        return b, smooth_pursuit
-
-    # ==========================================================
-    # Eq34-Eq35
-    # Standard deviation
-    # ==========================================================
-
-    @staticmethod
-    def gaze_std(x_gaze,
-                 y_gaze):
-
-        sigma_x = np.std(
-            x_gaze,
-            ddof=0
-        )
-
-        sigma_y = np.std(
-            y_gaze,
-            ddof=0
-        )
+        sigma_x = np.std(x_gaze)
+        sigma_y = np.std(y_gaze)
 
         return sigma_x, sigma_y
 
+
+# ==========================================================
+# Run calculations
+# ==========================================================
+
+if __name__ == "__main__":
+
+    # NOTE:
+    # These are gaze direction values, NOT true Euler angles.
+    # Replace if your dataset contains yaw/pitch/roll.
+
+    phi = left_dir_x[0]
+    theta = left_dir_y[0]
+    psi = left_dir_z[0]
+
+    print("\n===== ROTATION MATRICES =====\n")
+
+    print("Rx:")
+    print(EyeTrackingFramework.Rx(phi))
+
+    print("\nRy:")
+    print(EyeTrackingFramework.Ry(theta))
+
+    print("\nRz:")
+    print(EyeTrackingFramework.Rz(psi))
+
+    print("\nRotation Matrix:")
+    print(
+        EyeTrackingFramework.rotation_matrix(
+            psi,
+            theta,
+            phi
+        )
+    )
+
+    print("\n===== HEAD ANGLES =====\n")
+
+    alpha = EyeTrackingFramework.alpha(
+        psi,
+        theta,
+        phi
+    )
+
+    beta = EyeTrackingFramework.beta(
+        theta,
+        phi
+    )
+
+    print("Alpha:", alpha)
+    print("Beta :", beta)
+
+    print("\n===== VELOCITY =====\n")
+
+    vx, vy = EyeTrackingFramework.velocity(
+        x_g,
+        y_g,
+        dt
+    )
+
+    print("Mean vx:", np.mean(vx))
+    print("Mean vy:", np.mean(vy))
+
+    print("\n===== ACCELERATION =====\n")
+
+    acc = EyeTrackingFramework.acceleration(
+        vx,
+        vy,
+        dt
+    )
+
+    print("Mean acceleration:")
+    print(np.mean(acc))
+
+    print("\n===== AMPLITUDE =====\n")
+
+    amp = EyeTrackingFramework.amplitude(
+        x_g,
+        y_g
+    )
+
+    print("Amplitude:")
+    print(amp)
+
+    print("\n===== EUCLIDEAN DISTANCE =====\n")
+
+    ed = EyeTrackingFramework.eye_euclidean_distance(
+        x_g,
+        y_g
+    )
+
+    print(
+        "Cluster distance:",
+        EyeTrackingFramework.cluster_distance(ed)
+    )
+
+    print("\n===== STANDARD DEVIATION =====\n")
+
+    sigma_x, sigma_y = (
+        EyeTrackingFramework.gaze_std(
+            x_g,
+            y_g
+        )
+    )
+
+    print("Sigma X:", sigma_x)
+    print("Sigma Y:", sigma_y)
+
     # ==========================================================
-    # Eq36-Eq39
-    # Classification metrics
+    # Collect results
     # ==========================================================
 
-    @staticmethod
-    def sensitivity(tp, fn):
-        return tp / (tp + fn)
+    results = {
+        "alpha": alpha,
+        "beta": beta,
+        "mean_vx": np.mean(vx),
+        "mean_vy": np.mean(vy),
+        "mean_acceleration": np.mean(acc),
+        "amplitude": amp,
+        "cluster_distance": EyeTrackingFramework.cluster_distance(ed),
+        "sigma_x": sigma_x,
+        "sigma_y": sigma_y
+    }
 
-    @staticmethod
-    def specificity(tn, fp):
-        return tn / (tn + fp)
+    # ==========================================================
+    # Export results as csv file
+    # ==========================================================
 
-    @staticmethod
-    def precision(tp, fp):
-        return tp / (tp + fp)
+    results_df = pd.DataFrame(
+        results.items(),
+        columns=["Metric", "Value"]
+    )
 
-    @staticmethod
-    def balanced_accuracy(
-            tp, fn,
-            tn, fp):
+    output_path = (
+            PROJECT_ROOT
+            / "Results"
+            / "First_Row"
+            / f"equation_results_P{P}.csv"
+    )
 
-        sen = tp / (tp + fn)
-        spec = tn / (tn + fp)
+    # Create folder if needed
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
-        return (sen + spec) / 2
+    results_df.to_csv(
+        output_path,
+        index=False
+    )
+
+    print(f"\nResults saved to:\n{output_path}")
+
+    # ==========================================================
+    # Export velocity results between each sample as csv file
+    # ==========================================================
+
+    timeseries_df = pd.DataFrame({
+        "timestamp": t[1:],
+        "vx": vx,
+        "vy": vy,
+
+        "alpha": alpha,
+        "beta": beta,
+        "mean_vx": np.mean(vx),
+        "mean_vy": np.mean(vy),
+        "mean_acceleration": np.mean(acc),
+        "amplitude": amp,
+        "cluster_distance": EyeTrackingFramework.cluster_distance(ed),
+        "sigma_x": sigma_x,
+        "sigma_y": sigma_y
+    })
+
+    timeseries_path = (
+            PROJECT_ROOT
+            / "Results"
+            / "AllData"
+            / f"timeseries_results_P{P}.csv"
+    )
+
+    timeseries_path.parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    timeseries_df.to_csv(
+        timeseries_path,
+        index=False
+    )
