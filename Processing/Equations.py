@@ -2,6 +2,10 @@ import numpy as np
 
 
 class EyeTrackingFramework:
+
+    ScreenDis = 300
+    MirokaiDis = 150
+
     """
     Implementation of equations Eq1-Eq39.
     Angles are assumed to be in radians.
@@ -40,6 +44,7 @@ class EyeTrackingFramework:
         """
         Eq3
         R = Rz(psi) @ Ry(theta) @ Rx(phi)
+        "@" is for matrix multiplication
         """
         return (
             EyeTrackingFramework.Rz(psi)
@@ -134,8 +139,11 @@ class EyeTrackingFramework:
                      eye_signal):
         """
         Eq1
-
         S_G = S_H + S_E
+        
+        S_G: Sum of eye in space signal
+        S_H: Head in space signal
+        S_E: Eye in head signal
         """
         return head_signal + eye_signal
 

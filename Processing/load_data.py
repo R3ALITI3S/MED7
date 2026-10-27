@@ -15,7 +15,7 @@ def open_text(path):
         return gzip.open(path, "rt", encoding="utf-8")
     return open(path, "rt", encoding="utf-8")
 
-def load_gaze_data(root=PROJECT_ROOT / "RawData", filename="Participant_6_GZ"):
+def load_gaze_data(root=PROJECT_ROOT / "RawData" / "GazeData", filename="Participant_6_GZ"):
     """Load every gazedata.gz found under `root` into one DataFrame.
 
             Each recording folder is treated as one participant, and the folder name
