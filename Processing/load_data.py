@@ -5,6 +5,8 @@ import pandas as pd
 
 #From page 87 in the ML book
 
+P = 6 #Participant number
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 def open_text(path):
@@ -15,7 +17,7 @@ def open_text(path):
         return gzip.open(path, "rt", encoding="utf-8")
     return open(path, "rt", encoding="utf-8")
 
-def load_gaze_data(root=PROJECT_ROOT / "RawData" / "GazeData", filename="Participant_6_GZ"):
+def load_gaze_data(root=PROJECT_ROOT / "RawData" / "GazeData", filename=f"Participant_{P}_GZ"):
     """Load every gazedata.gz found under `root` into one DataFrame.
 
             Each recording folder is treated as one participant, and the folder name
@@ -59,7 +61,7 @@ def load_gaze_data(root=PROJECT_ROOT / "RawData" / "GazeData", filename="Partici
     return data.sort_values(["participant", "timestamp"]).reset_index(drop=True)
 
 
-OUTPUT_DIR = PROJECT_ROOT / "ProcessedData"       # change the folder name if you prefer, e.g. FixedData
+OUTPUT_DIR = PROJECT_ROOT / "ProcessedData" # change the folder name if you prefer, e.g. FixedData
 
 
 def flatten_lists(df):
@@ -83,7 +85,7 @@ def flatten_lists(df):
     return out
 
 
-def save_csv(df, filename="Participant_6_GZ.csv"):
+def save_csv(df, filename=f"Participant_{P}_GZ.csv"):
     """Save the table as a CSV with one value per column."""
     OUTPUT_DIR.mkdir(exist_ok=True)
 
