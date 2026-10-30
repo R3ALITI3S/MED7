@@ -46,7 +46,7 @@ for column in EXPECTED_COLUMNS:
         print(f"Added missing column: {column}")
 
 # Handle empty cells and common missing-value markers
-df = df.fillna("null")
+df = df.fillna("0")
 
 df.to_csv(OUTPUT_FILE, index=False)
 
