@@ -11,13 +11,13 @@ from pathlib import Path
 baseFolder = Path(__file__).resolve().parent.parent
 
 inputFolder = baseFolder / "RawData" / "IMUData"
-outputFolder = baseFolder / "Results" / "IMU_Results"
+# outputFolder = baseFolder / "Results" / "IMU_Results"
 
 processedFolder = baseFolder / "ProcessedData" / "IMUData"
 accelGyroFolder = processedFolder / "AccelGyro"
 magnetometerFolder = processedFolder / "Magnetometer"
 
-for folder in [outputFolder, accelGyroFolder, magnetometerFolder]:
+for folder in [processedFolder, accelGyroFolder, magnetometerFolder]:
     folder.mkdir(parents=True, exist_ok=True)
 
 
@@ -246,12 +246,12 @@ def analyzeParticipant(participantNumber):
     # ======================================
 
     gapResults.to_csv(
-        outputFolder / f"Participant{participantNumber}_MagnetometerGaps.csv",
+        processedFolder / f"Participant{participantNumber}_MagnetometerGaps.csv",
         index=False
     )
 
     movementResults.to_csv(
-        outputFolder / f"Participant{participantNumber}_GapMovement.csv",
+        processedFolder / f"Participant{participantNumber}_GapMovement.csv",
         index=False
     )
 
@@ -321,7 +321,7 @@ for participantNumber in range(1, 7):
 summaryData = pd.DataFrame(allResults)
 
 summaryData.to_csv(
-    outputFolder / "AllParticipants_IMU_Summary.csv",
+    processedFolder / "AllParticipants_IMU_Summary.csv",
     index=False
 )
 
@@ -347,5 +347,5 @@ else:
     print("No participant files were found.")
 
 print("\nProcessed CSV files saved in:", processedFolder)
-print("Quality analysis saved in:", outputFolder)
+print("Quality analysis saved in:", processedFolder)
 print("\nIMU processing completed successfully.")
