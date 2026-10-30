@@ -227,47 +227,27 @@ if __name__ == "__main__":
     # These are gaze direction values, NOT true Euler angles.
     # Replace if your dataset contains yaw/pitch/roll.
 
-    phi = left_dir_x[0]
-    theta = left_dir_y[0]
-    psi = left_dir_z[0]
+    # ==========================================================
+    # Create time-series versions of all features
+    # ==========================================================
 
-    print("\n===== ROTATION MATRICES =====\n")
+    window = 50  # rolling window size
 
-    print("Rx:")
-    print(EyeTrackingFramework.Rx(phi))
-
-    print("\nRy:")
-    print(EyeTrackingFramework.Ry(theta))
-
-    print("\nRz:")
-    print(EyeTrackingFramework.Rz(psi))
-
-    print("\nRotation Matrix:")
-    print(
-        EyeTrackingFramework.rotation_matrix(
-            psi,
-            theta,
-            phi
-        )
+    # Alpha/Beta for every sample
+    alpha_ts = EyeTrackingFramework.alpha(
+        left_dir_z,
+        left_dir_y,
+        left_dir_x
     )
 
-    print("\n===== HEAD ANGLES =====\n")
-
-    alpha = EyeTrackingFramework.alpha(
-        psi,
-        theta,
-        phi
+    beta_ts = EyeTrackingFramework.beta(
+        left_dir_y,
+        left_dir_x
     )
 
-    beta = EyeTrackingFramework.beta(
-        theta,
-        phi
-    )
-
-    print("Alpha:", alpha)
-    print("Beta :", beta)
-
-    print("\n===== VELOCITY =====\n")
+    # Align with velocity intervals
+    alpha_ts = alpha_ts[1:]
+    beta_ts = beta_ts[1:]
 
     vx, vy = EyeTrackingFramework.velocity(
         x_g,
@@ -275,117 +255,153 @@ if __name__ == "__main__":
         dt
     )
 
-    print("Mean vx:", np.mean(vx))
-    print("Mean vy:", np.mean(vy))
-
-    print("\n===== ACCELERATION =====\n")
-
+    # Acceleration already exists per interval
+    # Length = len(vx)-1
     acc = EyeTrackingFramework.acceleration(
         vx,
         vy,
         dt
     )
+    acc_full = np.concatenate(([np.nan], acc))
 
-    print("Mean acceleration:")
-    print(np.mean(acc))
-
-    print("\n===== AMPLITUDE =====\n")
-
-    amp = EyeTrackingFramework.amplitude(
-        x_g,
-        y_g
-    )
-
-    print("Amplitude:")
-    print(amp)
-
-    print("\n===== EUCLIDEAN DISTANCE =====\n")
-
+    # Euclidean distance between consecutive gaze points
     ed = EyeTrackingFramework.eye_euclidean_distance(
         x_g,
         y_g
     )
 
-    print(
-        "Cluster distance:",
-        EyeTrackingFramework.cluster_distance(ed)
-    )
+    # ----------------------------------------------------------
+    # Amplitude
+    # ----------------------------------------------------------
 
-    print("\n===== STANDARD DEVIATION =====\n")
+    amp_ts = []
 
-    sigma_x, sigma_y = (
-        EyeTrackingFramework.gaze_std(
-            x_g,
-            y_g
+    for i in range(len(x_g)):
+        start = max(0, i - window)
+
+        x_window = x_g[start:i + 1]
+        y_window = y_g[start:i + 1]
+
+        amp_ts.append(
+            EyeTrackingFramework.amplitude(
+                x_window,
+                y_window
+            )
         )
+
+    amp_ts = np.array(amp_ts)[1:]
+
+    # ----------------------------------------------------------
+    # Cluster distance
+    # ----------------------------------------------------------
+
+    cluster_dist_ts = (
+        pd.Series(ed)
+        .rolling(
+            window=window,
+            min_periods=1
+        )
+        .sum()
+        .to_numpy()
     )
 
-    print("Sigma X:", sigma_x)
-    print("Sigma Y:", sigma_y)
+    # ----------------------------------------------------------
+    # Standard deviations
+    # ----------------------------------------------------------
 
-    # ==========================================================
-    # Collect results
-    # ==========================================================
-
-    results = {
-        "alpha": alpha,
-        "beta": beta,
-        "mean_vx": np.mean(vx),
-        "mean_vy": np.mean(vy),
-        "mean_acceleration": np.mean(acc),
-        "amplitude": amp,
-        "cluster_distance": EyeTrackingFramework.cluster_distance(ed),
-        "sigma_x": sigma_x,
-        "sigma_y": sigma_y
-    }
-
-    # ==========================================================
-    # Export results as csv file
-    # ==========================================================
-
-    results_df = pd.DataFrame(
-        results.items(),
-        columns=["Metric", "Value"]
+    sigma_x_ts = (
+        pd.Series(x_g)
+        .rolling(
+            window=window,
+            min_periods=1
+        )
+        .std()
+        .to_numpy()[1:]
     )
 
-    output_path = (
-            PROJECT_ROOT
-            / "Results"
-            / "First_Row"
-            / f"equation_results_P{P}.csv"
+    sigma_y_ts = (
+        pd.Series(y_g)
+        .rolling(
+            window=window,
+            min_periods=1
+        )
+        .std()
+        .to_numpy()[1:]
     )
 
-    # Create folder if needed
-    output_path.parent.mkdir(
-        parents=True,
-        exist_ok=True
+    # ----------------------------------------------------------
+    # Mean velocity
+    # ----------------------------------------------------------
+
+    mean_vx_ts = (
+        pd.Series(vx)
+        .rolling(
+            window=window,
+            min_periods=1
+        )
+        .mean()
+        .to_numpy()
     )
 
-    results_df.to_csv(
-        output_path,
-        index=False
+    mean_vy_ts = (
+        pd.Series(vy)
+        .rolling(
+            window=window,
+            min_periods=1
+        )
+        .mean()
+        .to_numpy()
     )
 
-    print(f"\nResults saved to:\n{output_path}")
+    # ----------------------------------------------------------
+    # Mean acceleration
+    # ----------------------------------------------------------
+
+    mean_acc_ts = (
+        pd.Series(acc_full)
+        .rolling(
+            window=window,
+            min_periods=1
+        )
+        .mean()
+        .to_numpy()
+    )
 
     # ==========================================================
-    # Export velocity results between each sample as csv file
+    # Export all dynamic features
     # ==========================================================
 
     timeseries_df = pd.DataFrame({
+
         "timestamp": t[1:],
+
+        # Velocity
         "vx": vx,
         "vy": vy,
 
-        "alpha": alpha,
-        "beta": beta,
-        "mean_vx": np.mean(vx),
-        "mean_vy": np.mean(vy),
-        "mean_acceleration": np.mean(acc),
-        "amplitude": amp,
-        "cluster_distance": EyeTrackingFramework.cluster_distance(ed),
-        "sigma_x": sigma_x,
-        "sigma_y": sigma_y
+        # Head angles
+        "alpha": alpha_ts,
+        "beta": beta_ts,
+
+        # Acceleration
+        "acceleration": acc_full,
+        "mean_acceleration": mean_acc_ts,
+
+        # Distance metrics
+        "euclidean_distance": ed,
+        "cluster_distance": cluster_dist_ts,
+
+        # Amplitude
+        "amplitude": amp_ts,
+
+        # Variability metrics
+        "sigma_x": sigma_x_ts,
+        "sigma_y": sigma_y_ts,
+
+        # Rolling velocity summaries
+        "mean_vx": mean_vx_ts,
+        "mean_vy": mean_vy_ts
+
     })
 
     timeseries_path = (
@@ -403,4 +419,9 @@ if __name__ == "__main__":
     timeseries_df.to_csv(
         timeseries_path,
         index=False
+    )
+
+    print(
+        f"\nTime-series results saved to:\n"
+        f"{timeseries_path}"
     )
