@@ -591,6 +591,225 @@ if __name__ == "__main__":
     )
 
     # ==========================================================
+    # EVENT DETECTION
+    # ==========================================================
+
+    # ----------------------------------------------------------
+    # Angular eye-in-space coordinates (degrees)
+    # ----------------------------------------------------------
+
+    x_deg = np.degrees(
+        np.arctan2(
+            x_G,
+            D_Screen
+        )
+    )
+
+    y_deg = np.degrees(
+        np.arctan2(
+            y_G,
+            D_Screen
+        )
+    )
+
+    # ----------------------------------------------------------
+    # Angular velocity (deg/s)
+    # ----------------------------------------------------------
+
+    vx_deg = np.diff(x_deg) / dt
+    vy_deg = np.diff(y_deg) / dt
+
+    speed_deg = np.sqrt(
+        vx_deg**2 +
+        vy_deg**2
+    )
+
+    # ==========================================================
+    # SACCADE DETECTION
+    # ==========================================================
+
+    velocity_threshold = 30.0      # deg/s
+    min_amplitude = 0.75           # deg
+    min_duration = 3               # samples
+
+    saccade_mask = speed_deg > velocity_threshold
+
+    saccade_events = []
+
+    start = None
+
+    for i, val in enumerate(saccade_mask):
+
+        if val and start is None:
+            start = i
+
+        elif not val and start is not None:
+
+            end = i
+
+            if end - start >= min_duration:
+
+                amp = np.sqrt(
+                    (
+                        np.max(x_deg[start:end])
+                        -
+                        np.min(x_deg[start:end])
+                    )**2
+                    +
+                    (
+                        np.max(y_deg[start:end])
+                        -
+                        np.min(y_deg[start:end])
+                    )**2
+                )
+
+                if amp >= min_amplitude:
+                    saccade_events.append(
+                        (start, end)
+                    )
+
+            start = None
+
+    # ==========================================================
+    # SELECT OBJECT OF INTEREST
+    # ==========================================================
+
+    target_x = np.where(
+        screen_inside,
+        screen_x,
+        mirokai_x
+    )
+
+    target_y = np.where(
+        screen_inside,
+        screen_y,
+        mirokai_y
+    )
+
+    target_x_deg = np.degrees(
+        np.arctan2(
+            target_x,
+            D_Screen
+        )
+    )
+
+    target_y_deg = np.degrees(
+        np.arctan2(
+            target_y,
+            D_Screen
+        )
+    )
+
+    target_vx = np.diff(
+        target_x_deg
+    ) / dt
+
+    target_vy = np.diff(
+        target_y_deg
+    ) / dt
+
+    target_speed = np.sqrt(
+        target_vx**2 +
+        target_vy**2
+    )
+
+    # ==========================================================
+    # PURSUIT DETECTION
+    # ==========================================================
+
+    direction_similarity = (
+        vx_deg * target_vx
+        +
+        vy_deg * target_vy
+    ) / (
+        speed_deg *
+        target_speed +
+        1e-6
+    )
+
+    pursuit_mask = (
+        (direction_similarity > 0.8)
+        &
+        (speed_deg > 5)
+        &
+        (target_speed > 5)
+    )
+
+    labels = np.full(
+        len(x_G),
+        "Fixation",
+        dtype=object
+    )
+
+    # ----------------------------------------------------------
+    # Label saccades
+    # ----------------------------------------------------------
+
+    for start, end in saccade_events:
+
+        labels[start:end] = "Saccade"
+
+    # ----------------------------------------------------------
+    # Label smooth pursuits
+    # ----------------------------------------------------------
+
+    min_pursuit_samples = 6   # ~100 ms @60 Hz
+
+    start = None
+
+    for i, val in enumerate(pursuit_mask):
+
+        if val and start is None:
+            start = i
+
+        elif not val and start is not None:
+
+            end = i
+
+            if (
+                end - start
+                >=
+                min_pursuit_samples
+            ):
+
+                pursuit_slice = (
+                    labels[start:end]
+                    !=
+                    "Saccade"
+                )
+
+                labels[start:end][
+                    pursuit_slice
+                ] = "SmoothPursuit"
+
+            start = None
+
+    # ----------------------------------------------------------
+    # Pad arrays to dataframe length
+    # ----------------------------------------------------------
+
+    speed_deg_full = np.concatenate(
+        (
+            [np.nan],
+            speed_deg
+        )
+    )
+
+    vx_deg_full = np.concatenate(
+        (
+            [np.nan],
+            vx_deg
+        )
+    )
+
+    vy_deg_full = np.concatenate(
+        (
+            [np.nan],
+            vy_deg
+        )
+    )
+
+    # ==========================================================
     # Export all dynamic features
     # ==========================================================
 
@@ -610,6 +829,10 @@ if __name__ == "__main__":
         "vx": vx,
         "vy": vy,
 
+        "angular_vx": vx_deg_full[1:],
+        "angular_vy": vy_deg_full[1:],
+        "angular_speed": speed_deg_full[1:],
+
         "acceleration": acc_full,
         "mean_acceleration": mean_acc_ts,
 
@@ -622,7 +845,12 @@ if __name__ == "__main__":
         "sigma_y": sigma_y_ts,
 
         "mean_vx": mean_vx_ts,
-        "mean_vy": mean_vy_ts
+        "mean_vy": mean_vy_ts,
+
+        "screen_inside": screen_inside[1:],
+        "mirokai_inside": mirokai_inside[1:],
+
+        "event": labels[1:]
     })
 
     timeseries_path = (
