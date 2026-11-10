@@ -19,6 +19,20 @@ csv_path = (
 
 df = pd.read_csv(csv_path)
 
+# ==========================================================
+# Load Madgwick filter
+# ==========================================================
+
+orientation_path = (
+    PROJECT_ROOT
+    / "ProcessedData"
+    / "IMUData"
+    / "Madgwick"
+    / f"Participant{P}_Orientation.csv"
+)
+
+orientation_df = pd.read_csv(orientation_path)
+
 
 # ==========================================================
 # Handle missing values
@@ -62,10 +76,6 @@ dt = np.diff(t)
 x_g = df["gaze2d_x"].to_numpy()
 y_g = df["gaze2d_y"].to_numpy()
 
-left_dir_x = df["eyeleft.gazedirection_x"].to_numpy()
-left_dir_y = df["eyeleft.gazedirection_y"].to_numpy()
-left_dir_z = df["eyeleft.gazedirection_z"].to_numpy()
-
 
 # ==========================================================
 # Eye Tracking Framework
@@ -105,6 +115,24 @@ class EyeTrackingFramework:
             @ EyeTrackingFramework.Ry(theta)
             @ EyeTrackingFramework.Rx(phi)
         )
+
+    @staticmethod
+    def quaternion_to_rotation_matrix(q):
+        w, x, y, z = q
+
+        return np.array([
+            [1 - 2 * (y * y + z * z),
+             2 * (x * y - z * w),
+             2 * (x * z + y * w)],
+
+            [2 * (x * y + z * w),
+             1 - 2 * (x * x + z * z),
+             2 * (y * z - x * w)],
+
+            [2 * (x * z - y * w),
+             2 * (y * z + x * w),
+             1 - 2 * (x * x + y * y)]
+        ])
 
     @staticmethod
     def rotate_heading_vector(v0, psi, theta, phi):
@@ -157,26 +185,31 @@ class EyeTrackingFramework:
         )
 
     @staticmethod
-    def velocity(x_gaze, y_gaze, dt):
+    def velocity(world_vectors, dt):
+        dot_products = np.sum(
+            world_vectors[1:] *
+            world_vectors[:-1],
+            axis=1
+        )
 
-        vx = np.diff(x_gaze) / dt
-        vy = np.diff(y_gaze) / dt
+        dot_products = np.clip(
+            dot_products,
+            -1.0,
+            1.0
+        )
 
-        return vx, vy
+        angular_velocity = (
+                np.arccos(dot_products)
+                / dt
+        )
+
+        return angular_velocity
 
     @staticmethod
-    def acceleration(vx, vy, dt):
+    def acceleration(v, dt):
+        dv = np.diff(v)
 
-        dvx = np.diff(vx)
-        dvy = np.diff(vy)
-
-        return (
-            np.sqrt(
-                dvx**2 + dvy**2
-            )
-            /
-            dt[1:]
-        )
+        return dv / dt[1:]
 
     @staticmethod
     def amplitude(x, y):
@@ -216,6 +249,35 @@ class EyeTrackingFramework:
 
         return sigma_x, sigma_y
 
+    @staticmethod
+    def interpolate_quaternions( # Interpolate quaternions to gaze timestamps
+            target_t,
+            source_t,
+            quaternions
+    ):
+        interp_q = np.zeros(
+            (len(target_t), 4),
+            dtype=float
+        )
+
+        for j in range(4):
+            interp_q[:, j] = np.interp(
+                target_t,
+                source_t,
+                quaternions[:, j]
+            )
+
+        # Renormalize each quaternion
+        norms = np.linalg.norm(
+            interp_q,
+            axis=1,
+            keepdims=True
+        )
+
+        interp_q /= norms
+
+        return interp_q
+
 
 # ==========================================================
 # Run calculations
@@ -233,42 +295,101 @@ if __name__ == "__main__":
 
     window = 50  # rolling window size
 
-    # Alpha/Beta for every sample
-    alpha_ts = EyeTrackingFramework.alpha(
-        left_dir_z,
-        left_dir_y,
-        left_dir_x
-    )
-
-    beta_ts = EyeTrackingFramework.beta(
-        left_dir_y,
-        left_dir_x
-    )
-
-    # Align with velocity intervals
-    alpha_ts = alpha_ts[1:]
-    beta_ts = beta_ts[1:]
-
-    vx, vy = EyeTrackingFramework.velocity(
-        x_g,
-        y_g,
-        dt
-    )
-
-    # Acceleration already exists per interval
-    # Length = len(vx)-1
-    acc = EyeTrackingFramework.acceleration(
-        vx,
-        vy,
-        dt
-    )
-    acc_full = np.concatenate(([np.nan], acc))
-
     # Euclidean distance between consecutive gaze points
     ed = EyeTrackingFramework.eye_euclidean_distance(
         x_g,
         y_g
     )
+
+    imu_t = orientation_df["timestamp"].to_numpy(dtype=float)
+
+    q_w = orientation_df["q_w"].to_numpy(dtype=float)
+    q_x = orientation_df["q_x"].to_numpy(dtype=float)
+    q_y = orientation_df["q_y"].to_numpy(dtype=float)
+    q_z = orientation_df["q_z"].to_numpy(dtype=float)
+
+    # Synchronizing quaternions
+    quaternions = np.column_stack([
+        q_w,
+        q_x,
+        q_y,
+        q_z
+    ])
+
+    interp_quaternions = (
+        EyeTrackingFramework.interpolate_quaternions(
+            t,  # gaze timestamps
+            imu_t,  # IMU timestamps
+            quaternions
+        )
+    )
+
+    # Rotate gaze to world coordinates
+    eye_vectors = df[
+        [
+            "eyeleft.gazedirection_x",
+            "eyeleft.gazedirection_y",
+            "eyeleft.gazedirection_z"
+        ]
+    ].to_numpy()
+
+    world_vectors = np.zeros_like(
+        eye_vectors,
+        dtype=float
+    )
+
+    for i in range(len(eye_vectors)):
+        R = (
+            EyeTrackingFramework
+            .quaternion_to_rotation_matrix(
+                interp_quaternions[i]
+            )
+        )
+
+        world_vectors[i] = (
+                R @ eye_vectors[i]
+        )
+
+        world_vectors[i] /= (
+            np.linalg.norm(
+                world_vectors[i]
+            )
+        )
+
+    # Extract components
+    world_gaze_x = world_vectors[:, 0]
+    world_gaze_y = world_vectors[:, 1]
+    world_gaze_z = world_vectors[:, 2]
+
+    # Angular velocity
+    v = EyeTrackingFramework.velocity(
+        world_vectors,
+        dt
+    )
+
+    # Angular acceleration
+    acc = EyeTrackingFramework.acceleration(
+        v,
+        dt
+    )
+
+    acc_full = np.concatenate(([np.nan], acc))
+
+    # Alpha/Beta for every sample
+    alpha_ts = EyeTrackingFramework.alpha(
+        world_gaze_z,
+        world_gaze_y,
+        world_gaze_x
+    )
+
+    beta_ts = EyeTrackingFramework.beta(
+        world_gaze_y,
+        world_gaze_x
+    )
+
+    # Align with velocity intervals
+    alpha_ts = alpha_ts[1:]
+    beta_ts = beta_ts[1:]
 
     # ----------------------------------------------------------
     # Amplitude
@@ -333,18 +454,8 @@ if __name__ == "__main__":
     # Mean velocity
     # ----------------------------------------------------------
 
-    mean_vx_ts = (
-        pd.Series(vx)
-        .rolling(
-            window=window,
-            min_periods=1
-        )
-        .mean()
-        .to_numpy()
-    )
-
-    mean_vy_ts = (
-        pd.Series(vy)
+    mean_v_ts = (
+        pd.Series(v)
         .rolling(
             window=window,
             min_periods=1
@@ -368,6 +479,68 @@ if __name__ == "__main__":
     )
 
     # ==========================================================
+    # EVENT DETECTION
+    # ==========================================================
+
+    # Angular velocity already computed from
+    # Madgwick-corrected world gaze vectors
+
+    speed_deg = np.degrees(v)
+
+    # ----------------------------------------------------------
+    # SACCADE DETECTION
+    # ----------------------------------------------------------
+
+    velocity_threshold = 30.0
+    min_duration = 3
+
+    saccade_mask = (
+            speed_deg >
+            velocity_threshold
+    )
+
+    labels = np.full(
+        len(v),
+        "Fixation",
+        dtype=object
+    )
+
+    saccade_events = []
+
+    start = None
+
+    for i, val in enumerate(saccade_mask):
+
+        if val and start is None:
+
+            start = i
+
+        elif not val and start is not None:
+
+            end = i
+
+            if end - start >= min_duration:
+                saccade_events.append(
+                    (start, end)
+                )
+
+            start = None
+
+    # Handle saccade reaching end
+    if start is not None:
+
+        end = len(saccade_mask)
+
+        if end - start >= min_duration:
+            saccade_events.append(
+                (start, end)
+            )
+
+    # Label saccades
+    for start, end in saccade_events:
+        labels[start:end] = "Saccade"
+
+    # ==========================================================
     # Export all dynamic features
     # ==========================================================
 
@@ -375,9 +548,10 @@ if __name__ == "__main__":
 
         "timestamp": t[1:],
 
+        "event": labels,
+
         # Velocity
-        "vx": vx,
-        "vy": vy,
+        "angular_velocity": v,
 
         # Head angles
         "alpha": alpha_ts,
@@ -399,8 +573,7 @@ if __name__ == "__main__":
         "sigma_y": sigma_y_ts,
 
         # Rolling velocity summaries
-        "mean_vx": mean_vx_ts,
-        "mean_vy": mean_vy_ts
+        "mean_angular_velocity": mean_v_ts
 
     })
 
