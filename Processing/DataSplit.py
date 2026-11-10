@@ -93,16 +93,16 @@ if __name__ == "__main__":
     print("Test participants:", groups["test"])
     print(f"Rows: train={len(train)}, val={len(val)}, test={len(test)}")
 
-# 3. Create Cross-Validation folds within the TRAIN set
-# Used for tuning the model and testing it on unseen participants without touching the Val/Test sets.
-# We cap n_splits at 5 (or the number of participants, if fewer than 5).
-print("\n--- Train Set Folds (for Cross-Validation) ---")
-folds = get_folds(train, method="gkf", n_splits=min(5, train["participant"].nunique()))
-for i, (tr, va) in enumerate(folds):
-    print(f"    Fold{i}: {len(tr)} train rows, {len(va)} val rows")
+    # 3. Create Cross-Validation folds within the TRAIN set
+    # Used for tuning the model and testing it on unseen participants without touching the Val/Test sets.
+    # We cap n_splits at 5 (or the number of participants, if fewer than 5).
+    print("\n--- Train Set Folds (for Cross-Validation) ---")
+    folds = get_folds(train, method="gkf", n_splits=min(5, train["participant"].nunique()))
+    for i, (tr, va) in enumerate(folds):
+        print(f"    Fold{i}: {len(tr)} train rows, {len(va)} val rows")
 
-# 4. (Optional) Global LOSO
-# Creates one fold per participant in the ENTIRE dataset.
-# Useful if you later want to report an overall "Leave-One-Subject-Out" score.
-loso = get_folds(df, method="loso")
-print(f"LOSO folds: {len(loso)}")
+    # 4. (Optional) Global LOSO
+    # Creates one fold per participant in the ENTIRE dataset.
+    # Useful if you later want to report an overall "Leave-One-Subject-Out" score.
+    loso = get_folds(df, method="loso")
+    print(f"LOSO folds: {len(loso)}")
