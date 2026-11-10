@@ -21,7 +21,7 @@ print(data.shape)
 timestamps = data["timestamp"].to_numpy(dtype=float)
 
 accelerometer = data [
-[ "accel_x", "accel_y", "accel_z" ]
+    [ "accel_x", "accel_y", "accel_z" ]
 ].to_numpy(dtype=float)
 
 gyroscope = data [
