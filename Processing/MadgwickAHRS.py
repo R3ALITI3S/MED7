@@ -37,32 +37,32 @@ if len(timestamps) < 2:
     raise ValueError("At least two samples are required.")
 
 if not np.all(np.isfinite(accelerometer)):
-    raise ValueError("Invalid accelerometer values.")
+    raise ValueError("Invalid accelerometer values.") # Checks for Nan, inf, -inf
 
 if not np.all(np.isfinite(gyroscope)):
-    raise ValueError("Invalid gyroscope values.")
+    raise ValueError("Invalid gyroscope values.") # Checks for Nan, inf, -inf
 
 if not np.all(np.isfinite(dt)) or np.any(dt <= 0):
     raise ValueError("Timestamps must be finite and increasing.")
 
 madgwick = Madgwick()
 
-quaternions = np.zeros((len(timestamps), 4), dtype=float)
+quaternions = np.zeros((len(timestamps), 4), dtype=float) # Creates array for the quaternions with a size of 4 for each timestamp
 
-quaternions[0] = [1.0, 0.0, 0.0, 0.0]
+quaternions[0] = [1.0, 0.0, 0.0, 0.0] # Center point (no rotation)
 
-for i in range(1, len(timestamps)):
+for i in range(1, len(timestamps)): # Goes through every sample except the first (movement requires min two points)
     quaternions[i] = madgwick.updateIMU(
-        q=quaternions[i - 1],
-        gyr=gyroscope[i],
-        acc=accelerometer[i],
-        dt=dt[i - 1]
-    )
+        q=quaternions[i - 1], # Uses previous orientation
+        gyr=gyroscope[i], # Uses gyroscope (tells how fast the sensor rotates)
+        acc=accelerometer[i], # Gravity reference (witch way is down)
+        dt=dt[i - 1] # Time difference between the current and last sample
+    ) # Returns a quaternion representing the orientation at sample 'i'
 
     if not np.all(np.isfinite(quaternions[i])):
         raise ValueError(f"Invalid quaternion at sample {i}")
 
-# saves the results
+# Saves the results in a table
 result = pd.DataFrame({
     "timestamp": timestamps,
     "q_w": quaternions[:, 0],
