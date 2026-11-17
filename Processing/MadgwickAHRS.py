@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 from ahrs.filters import Madgwick
 
+P = 13 # Participant nr
+
 base_folder = Path(__file__).resolve().parent.parent
 
 file_path = (
@@ -10,7 +12,7 @@ file_path = (
     / "ProcessedData"
     / "IMUData"
     / "AccelGyro"
-    / "Participant1_AccelGyro.csv"
+    / f"Participant{P}_AccelGyro.csv"
 )
 
 data = pd.read_csv(file_path)
@@ -76,7 +78,7 @@ output_path = (
     / "ProcessedData"
     / "IMUData"
     / "Madgwick"
-    / "Participant1_Orientation.csv"
+    / f"Participant{P}_Orientation.csv"
 )
 
 result.to_csv(output_path, index=False)
