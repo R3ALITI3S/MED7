@@ -7,7 +7,7 @@ from pathlib import Path
 # Load CSV
 # ==========================================================
 
-P = 1 # Participant number
+P = 13 # Participant number
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
