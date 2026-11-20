@@ -1,10 +1,10 @@
 
 import asyncio
 import time
-import cv2
 import torch
 
 from ultralytics import YOLO
+import cv2
 from g3pylib import connect_to_glasses
 
 '''
@@ -26,10 +26,10 @@ CONFIDENCE = 0.35
 DEVICE = 0 if torch.cuda.is_available() else "cpu"
 
 print("Loading custom YOLO segmentation model...")
-model = YOLO(MODEL_PATH)
+model = YOLO(r"C:\Users\nield\Desktop\GitHub\MED7\runs\detect\MED7_training\robot_tv_detection\weights\best.pt")
 
 # Just prints
-print("Model loaded successfully!")
+print("Model loaded successfully! ;)")
 print(f"Device: {DEVICE}")
 
 
