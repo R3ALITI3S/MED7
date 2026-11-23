@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 2
+names: ['Robot', 'TV']
+
+roboflow:
+  workspace: nieldas-workspace
+  project: med7
+  version: 1
+  license: Private
+  url: https://app.roboflow.com/nieldas-workspace/med7/1
