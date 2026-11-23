@@ -1,6 +1,8 @@
 import asyncio
 import time
 from pprint import pprint
+from collections import deque
+import numpy as np
 import cv2
 from g3pylib import connect_to_glasses
 
@@ -37,6 +39,18 @@ async def main():
                     samples = 0
                     start = time.monotonic()
 
+                    # blink data
+                    left_history = deque(maxlen=150)
+                    right_history = deque(maxlen=150)
+
+                    blink_count = 0
+                    blink_duration = 0
+                    blink_detected = False
+
+                    blinking = False
+                    blink_start = None
+                    last_candidate = None
+
                     while True:
 
                         # Get the next camera frame
@@ -56,6 +70,80 @@ async def main():
                                 latest_gaze = gaze
                                 latest_gaze_timestamp = gaze_timestamp
                                 samples += 1
+
+                                # get the pupil diameters
+                                left = gaze.get("eyeleft.pupildiameter")
+                                right = gaze.get("eyeright.pupildiameter")
+
+                                try:
+                                    left = float(left)
+                                    if not np.isfinite(left) or left <= 0:
+                                        left = np.nan
+                                except (TypeError, ValueError):
+                                    left = np.nan
+
+                                try:
+                                    right = float(right)
+                                    if not np.isfinite(right) or right <= 0:
+                                        right = np.nan
+                                except (TypeError, ValueError):
+                                    right = np.nan
+
+                                baseline_left = (
+                                    np.median(left_history)
+                                    if len(left_history) >= 30 else None
+                                )
+
+                                baseline_right = (
+                                    np.median(right_history)
+                                    if len(right_history) >= 30 else None
+                                )
+
+                                candidate = (
+                                    baseline_left is not None
+                                    and baseline_right is not None
+                                    and not np.isnan(left)
+                                    and not np.isnan(right)
+                                    and left < baseline_left * 0.80
+                                    and right < baseline_right * 0.80
+                                )
+
+                                now = time.monotonic()
+
+                                if candidate:
+
+                                    if not blinking:
+                                        blinking = True
+                                        blink_start = now
+
+                                    last_candidate = now
+
+                                elif blinking:
+
+                                    if last_candidate is not None:
+                                        gap = now - last_candidate
+
+                                        if gap > 0.04:
+
+                                            duration = last_candidate - blink_start
+
+                                            if 0.03 <= duration <= 0.30:
+                                                blink_count += 1
+                                                blink_duration = duration
+                                                blink_detected = True
+
+                                            blinking = False
+                                            blink_start = None
+                                            last_candidate = None
+
+                                elif blink_detected:
+                                    blink_detected = False
+
+                                if not np.isnan(left):
+                                    left_history.append(left)
+
+                                if not np.isnan(right):
+                                    right_history.append(right)
 
                         except asyncio.TimeoutError:
                             pass
@@ -105,6 +193,37 @@ async def main():
                                     (0, 255, 0),
                                     2,
                                 )
+                        # blink text
+                        cv2.putText(
+                            image,
+                            f"Blinks: {blink_count}",
+                            (20, 120),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.8,
+                            (0, 255, 255),
+                            2,
+                        )
+
+                        cv2.putText(
+                            image,
+                            f"Last blink: {blink_duration:.3f}s",
+                            (20, 155),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.8,
+                            (0, 255, 255),
+                            2,
+                        )
+
+                        if blink_detected:
+                            cv2.putText(
+                                image,
+                                "BLINK DETECTED",
+                                (20, 195),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.9,
+                                (0, 0, 255),
+                                2,
+                            )
 
                         # Display timestamp
                         cv2.putText(
@@ -131,6 +250,8 @@ async def main():
                     print("\n" + "=" * 70)
                     print("Live feed stopped.")
                     print(f"Gaze samples received: {samples}")
+                    print(f"Blinks detected: {blink_count}")
+                    print(f"Last blink duration: {blink_duration:.3f}s")
                     print("=" * 70)
 
 
