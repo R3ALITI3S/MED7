@@ -2,7 +2,7 @@ import json
 import csv
 from pathlib import Path
 
-P = 1 # Participant number
+P = 5 # Participant number
 AnoFrames = 1000 # Amount of frames annotated
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -25,8 +25,8 @@ columns = [
     "annotation_id",
     "image_id",
     "file_name",
-    "image_width",
-    "image_height",
+    # "image_width",
+    # "image_height",
     "category_id",
     "category_name",
     "bbox_x",
@@ -34,8 +34,8 @@ columns = [
     "bbox_width",
     "bbox_height",
     "area",
-    "iscrowd",
-    "occluded",
+    # "iscrowd",
+    # "occluded",
     "rotation",
     "track_id",
     "keyframe"
@@ -55,8 +55,8 @@ for ann in data["annotations"][:AnoFrames]:
         "annotation_id": ann.get("id"),
         "image_id": ann.get("image_id"),
         "file_name": image.get("file_name"),
-        "image_width": image.get("width"),
-        "image_height": image.get("height"),
+        # "image_width": image.get("width"),
+        # "image_height": image.get("height"),
         "category_id": ann.get("category_id"),
         "category_name": categories.get(ann.get("category_id")),
         "bbox_x": round(bbox[0], 1) if bbox[0] is not None else None,
@@ -64,8 +64,8 @@ for ann in data["annotations"][:AnoFrames]:
         "bbox_width": round(bbox[2], 1) if bbox[2] is not None else None,
         "bbox_height": round(bbox[3], 1) if bbox[3] is not None else None,
         "area": round(ann["area"], 1) if ann.get("area") is not None else None,
-        "iscrowd": ann.get("iscrowd"),
-        "occluded": attributes.get("occluded"),
+        # "iscrowd": ann.get("iscrowd"),
+        # "occluded": attributes.get("occluded"),
         "rotation": round(attributes["rotation"], 1) if attributes.get("rotation") is not None else None,
         "track_id": attributes.get("track_id"),
         "keyframe": attributes.get("keyframe")
