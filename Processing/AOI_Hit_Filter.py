@@ -1,10 +1,12 @@
 import csv
 from pathlib import Path
 
+P = 1 # Participant nr.
+
 baseFolder = Path(__file__).resolve().parent.parent
 
-input_file = baseFolder / "RawData" / "AOI" / "EyeTrackingAOI_1.tsv"
-output_file = baseFolder / "ProcessedData" / "AOI_Hit" / "AOI_1_EyeTrackerOnly.csv"
+input_file = baseFolder / "RawData" / "AOI" / f"EyeTrackingAOI_{P}.tsv"
+output_file = baseFolder / "ProcessedData" / "AOI_Hit" / f"AOI_{P}_EyeTrackerOnly.csv"
 
 # Columns to keep
 columns_to_keep = [
@@ -12,8 +14,8 @@ columns_to_keep = [
     "Sensor",
     "Eye movement type",
     "Eye movement event duration",
-    "AOI hit [Participant 1 - Mirokai]",
-    "AOI hit [Participant 1 - TV]"
+    f"AOI hit [Participant {P} - Mirokai]",
+    f"AOI hit [Participant {P} - TV]"
 ]
 
 with open(input_file, "r", encoding="utf-8-sig", newline="") as infile, \
