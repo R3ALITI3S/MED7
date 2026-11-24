@@ -1,4 +1,3 @@
-
 from ultralytics import YOLO
 
 # Load pretrained YOLO26 detection model
@@ -6,13 +5,13 @@ model = YOLO("yolo26n.pt")
 
 # Train using your MED7 dataset
 results = model.train(
-    data="RobotDataset/data.yaml",
-    epochs=10,
+    data="RobotDataset/data.yaml", # Skal ændres når det rigtige data kommer ind
+    epochs=50,
     imgsz=640,
     batch=8,
     workers=4,
     device="cpu",       # Use GPU; change to "cpu" if necessary
-    patience=20,
+    patience=10,
     project="MED7_training",
     name="robot_tv_detection",
     plots=True,
