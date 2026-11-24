@@ -2,7 +2,7 @@ import json
 import csv
 from pathlib import Path
 
-P = 5 # Participant number
+P = 1 # Participant number
 AnoFrames = 1000 # Amount of frames annotated
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -33,12 +33,12 @@ columns = [
     "bbox_y",
     "bbox_width",
     "bbox_height",
-    "area",
+    # "area",
     # "iscrowd",
     # "occluded",
     "rotation",
     "track_id",
-    "keyframe"
+    # "keyframe"
 ]
 
 # Convert annotations into rows
@@ -63,12 +63,12 @@ for ann in data["annotations"][:AnoFrames]:
         "bbox_y": round(bbox[1], 1) if bbox[1] is not None else None,
         "bbox_width": round(bbox[2], 1) if bbox[2] is not None else None,
         "bbox_height": round(bbox[3], 1) if bbox[3] is not None else None,
-        "area": round(ann["area"], 1) if ann.get("area") is not None else None,
+        # "area": round(ann["area"], 1) if ann.get("area") is not None else None,
         # "iscrowd": ann.get("iscrowd"),
         # "occluded": attributes.get("occluded"),
         "rotation": round(attributes["rotation"], 1) if attributes.get("rotation") is not None else None,
         "track_id": attributes.get("track_id"),
-        "keyframe": attributes.get("keyframe")
+        # "keyframe": attributes.get("keyframe")
     }
 
     rows.append(row)
