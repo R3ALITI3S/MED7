@@ -5,7 +5,7 @@ import pandas as pd
 
 #From page 87 in the ML book
 
-P = 6 #Participant number
+P = 13 #Participant number
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 

@@ -7,20 +7,31 @@ from pathlib import Path
 # Load CSV
 # ==========================================================
 
-P = 1 # Participant number
-
-D_Screen = 3000 # Distance to screen in mm
-D_Mirokai = 1500 # Distance to Mirokai in mm
+P = 13 # Participant number
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 csv_path = (
     PROJECT_ROOT
-    / "ProcessedData"
-    / f"Participant_{P}_GZ.csv"
+    / "FixedData"
+    / f"Participant_{P}_GZ_fixed.csv"
 )
 
 df = pd.read_csv(csv_path)
+
+# ==========================================================
+# Load Madgwick filter
+# ==========================================================
+
+orientation_path = (
+    PROJECT_ROOT
+    / "ProcessedData"
+    / "IMUData"
+    / "Madgwick"
+    / f"Participant{P}_Orientation.csv"
+)
+
+orientation_df = pd.read_csv(orientation_path)
 
 
 # ==========================================================
@@ -65,83 +76,12 @@ dt = np.diff(t)
 x_g = df["gaze2d_x"].to_numpy()
 y_g = df["gaze2d_y"].to_numpy()
 
-left_dir_x = df["eyeleft.gazedirection_x"].to_numpy()
-left_dir_y = df["eyeleft.gazedirection_y"].to_numpy()
-left_dir_z = df["eyeleft.gazedirection_z"].to_numpy()
-
 
 # ==========================================================
 # Eye Tracking Framework
 # ==========================================================
 
 class EyeTrackingFramework:
-
-    @staticmethod
-    def head_position_screen(alpha, beta, D_Screen):
-        x_H = D_Screen * np.tan(alpha)
-        y_H = D_Screen * np.tan(beta)
-        return x_H, y_H
-
-    @staticmethod
-    def metric_to_pixels(
-            x_H,
-            y_H,
-            screen_width_m,
-            screen_height_m,
-            x_res,
-            y_res):
-        x_px = x_H * (x_res / screen_width_m)
-        y_px = y_H * (y_res / screen_height_m)
-
-        return x_px, y_px
-
-    @staticmethod
-    def object_position(
-            alpha_obj,
-            beta_obj,
-            D_obj):
-        x_obj = D_obj * np.tan(alpha_obj)
-        y_obj = D_obj * np.tan(beta_obj)
-
-        return x_obj, y_obj
-
-    @staticmethod
-    def project_gaze_to_depth(
-            gaze_x,
-            gaze_y,
-            gaze_z,
-            depth):
-        # Prevent division by zero
-        z = np.where(
-            np.abs(gaze_z) < 1e-6,
-            np.nan,
-            gaze_z
-        )
-
-        x = depth * (gaze_x / z)
-        y = depth * (gaze_y / z)
-
-        return x, y
-
-    @staticmethod
-    def point_inside_object(
-            hit_points,
-            center,
-            width,
-            height):
-        local = hit_points - center
-
-        x = local[:, 0]
-        y = local[:, 1]
-
-        inside = (
-                (np.abs(x) <= width / 2)
-                &
-                (np.abs(y) <= height / 2)
-        )
-
-        return inside
-
 
     @staticmethod
     def Rx(phi):
@@ -175,6 +115,24 @@ class EyeTrackingFramework:
             @ EyeTrackingFramework.Ry(theta)
             @ EyeTrackingFramework.Rx(phi)
         )
+
+    @staticmethod
+    def quaternion_to_rotation_matrix(q):
+        w, x, y, z = q
+
+        return np.array([
+            [1 - 2 * (y * y + z * z),
+             2 * (x * y - z * w),
+             2 * (x * z + y * w)],
+
+            [2 * (x * y + z * w),
+             1 - 2 * (x * x + z * z),
+             2 * (y * z - x * w)],
+
+            [2 * (x * z - y * w),
+             2 * (y * z + x * w),
+             1 - 2 * (x * x + y * y)]
+        ])
 
     @staticmethod
     def rotate_heading_vector(v0, psi, theta, phi):
@@ -227,26 +185,31 @@ class EyeTrackingFramework:
         )
 
     @staticmethod
-    def velocity(x_gaze, y_gaze, dt):
+    def velocity(world_vectors, dt):
+        dot_products = np.sum(
+            world_vectors[1:] *
+            world_vectors[:-1],
+            axis=1
+        )
 
-        vx = np.diff(x_gaze) / dt
-        vy = np.diff(y_gaze) / dt
+        dot_products = np.clip(
+            dot_products,
+            -1.0,
+            1.0
+        )
 
-        return vx, vy
+        angular_velocity = (
+                np.arccos(dot_products)
+                / dt
+        )
+
+        return angular_velocity
 
     @staticmethod
-    def acceleration(vx, vy, dt):
+    def acceleration(v, dt):
+        dv = np.diff(v)
 
-        dvx = np.diff(vx)
-        dvy = np.diff(vy)
-
-        return (
-            np.sqrt(
-                dvx**2 + dvy**2
-            )
-            /
-            dt[1:]
-        )
+        return dv / dt[1:]
 
     @staticmethod
     def amplitude(x, y):
@@ -271,15 +234,6 @@ class EyeTrackingFramework:
         )
 
     @staticmethod
-    def object_euclidean_distance(
-            x_obj,
-            y_obj):
-        dx = np.diff(x_obj)
-        dy = np.diff(y_obj)
-
-        return np.sqrt(dx ** 2 + dy ** 2)
-
-    @staticmethod
     def cluster_distance(ed_cluster):
 
         return np.sum(ed_cluster)
@@ -296,29 +250,33 @@ class EyeTrackingFramework:
         return sigma_x, sigma_y
 
     @staticmethod
-    def local_plane_coordinates(
-            hit_points,
-            center,
-            u,
-            v):
-        local = hit_points - center
-
-        x_local = local @ u
-        y_local = local @ v
-
-        return x_local, y_local
-
-    @staticmethod
-    def inside_object(
-            x_local,
-            y_local,
-            width,
-            height):
-        return (
-                (np.abs(x_local) <= width / 2)
-                &
-                (np.abs(y_local) <= height / 2)
+    def interpolate_quaternions( # Interpolate quaternions to gaze timestamps
+            target_t,
+            source_t,
+            quaternions
+    ):
+        interp_q = np.zeros(
+            (len(target_t), 4),
+            dtype=float
         )
+
+        for j in range(4):
+            interp_q[:, j] = np.interp(
+                target_t,
+                source_t,
+                quaternions[:, j]
+            )
+
+        # Renormalize each quaternion
+        norms = np.linalg.norm(
+            interp_q,
+            axis=1,
+            keepdims=True
+        )
+
+        interp_q /= norms
+
+        return interp_q
 
 
 # ==========================================================
@@ -327,91 +285,111 @@ class EyeTrackingFramework:
 
 if __name__ == "__main__":
 
-    window = 50
+    # NOTE:
+    # These are gaze direction values, NOT true Euler angles.
+    # Replace if your dataset contains yaw/pitch/roll.
 
-    # ======================================================
-    # Convert gaze vector -> viewing angles
-    # ======================================================
+    # ==========================================================
+    # Create time-series versions of all features
+    # ==========================================================
 
-    alpha_ts = np.arctan2(
-        left_dir_x,
-        left_dir_z
+    window = 50  # rolling window size
+
+    # Euclidean distance between consecutive gaze points
+    ed = EyeTrackingFramework.eye_euclidean_distance(
+        x_g,
+        y_g
     )
 
-    beta_ts = np.arctan2(
-        left_dir_y,
-        left_dir_z
-    )
+    imu_t = orientation_df["timestamp"].to_numpy(dtype=float)
 
-    # ======================================================
-    # Project gaze ray onto screen plane
-    # ======================================================
+    q_w = orientation_df["q_w"].to_numpy(dtype=float)
+    q_x = orientation_df["q_x"].to_numpy(dtype=float)
+    q_y = orientation_df["q_y"].to_numpy(dtype=float)
+    q_z = orientation_df["q_z"].to_numpy(dtype=float)
 
-    screen_x, screen_y = (
-        EyeTrackingFramework.project_gaze_to_depth(
-            left_dir_x,
-            left_dir_y,
-            left_dir_z,
-            D_Screen
+    # Synchronizing quaternions
+    quaternions = np.column_stack([
+        q_w,
+        q_x,
+        q_y,
+        q_z
+    ])
+
+    interp_quaternions = (
+        EyeTrackingFramework.interpolate_quaternions(
+            t,  # gaze timestamps
+            imu_t,  # IMU timestamps
+            quaternions
         )
     )
 
-    screen_hits = np.column_stack([
-        screen_x,
-        screen_y,
-        np.full_like(screen_x, D_Screen)
-    ])
+    # Rotate gaze to world coordinates
+    eye_vectors = df[
+        [
+            "eyeleft.gazedirection_x",
+            "eyeleft.gazedirection_y",
+            "eyeleft.gazedirection_z"
+        ]
+    ].to_numpy()
 
-    # ======================================================
-    # Project gaze ray onto object plane
-    # ======================================================
-
-    mirokai_x, mirokai_y = (
-        EyeTrackingFramework.project_gaze_to_depth(
-            left_dir_x,
-            left_dir_y,
-            left_dir_z,
-            D_Mirokai
-        )
+    world_vectors = np.zeros_like(
+        eye_vectors,
+        dtype=float
     )
 
-    mirokai_hits = np.column_stack([
-        mirokai_x,
-        mirokai_y,
-        np.full_like(mirokai_x, D_Mirokai)
-    ])
+    for i in range(len(eye_vectors)):
+        R = (
+            EyeTrackingFramework
+            .quaternion_to_rotation_matrix(
+                interp_quaternions[i]
+            )
+        )
 
-    # ======================================================
-    # Eye-in-space coordinates (Eq11/12)
-    # ======================================================
+        world_vectors[i] = (
+                R @ eye_vectors[i]
+        )
 
-    x_G = np.nan_to_num(screen_x, nan=0.0) # Screen x value, with a safe where all NaN values get set to 0
-    y_G = np.nan_to_num(screen_y, nan=0.0) # Screen y value, with a safe where all NaN values get set to 0
+        world_vectors[i] /= (
+            np.linalg.norm(
+                world_vectors[i]
+            )
+        )
+
+    # Extract components
+    world_gaze_x = world_vectors[:, 0]
+    world_gaze_y = world_vectors[:, 1]
+    world_gaze_z = world_vectors[:, 2]
+
+    # Angular velocity
+    v = EyeTrackingFramework.velocity(
+        world_vectors,
+        dt
+    )
+
+    # Angular acceleration
+    acc = EyeTrackingFramework.acceleration(
+        v,
+        dt
+    )
+
+    acc_full = np.concatenate(([np.nan], acc))
+
+    # Alpha/Beta for every sample
+    alpha_ts = EyeTrackingFramework.alpha(
+        world_gaze_z,
+        world_gaze_y,
+        world_gaze_x
+    )
+
+    beta_ts = EyeTrackingFramework.beta(
+        world_gaze_y,
+        world_gaze_x
+    )
 
     # Align with velocity intervals
     alpha_ts = alpha_ts[1:]
     beta_ts = beta_ts[1:]
-
-    vx, vy = EyeTrackingFramework.velocity(
-        x_G,
-        y_G,
-        dt
-    )
-
-    # Acceleration already exists per interval
-    # Length = len(vx)-1
-    acc = EyeTrackingFramework.acceleration(
-        vx,
-        vy,
-        dt
-    )
-    acc_full = np.concatenate(([np.nan], acc))
-
-    # Euclidean distance between consecutive gaze points
-    ed = EyeTrackingFramework.eye_euclidean_distance(
-        x_G,
-        y_G
-    )
 
     # ----------------------------------------------------------
     # Amplitude
@@ -422,8 +400,8 @@ if __name__ == "__main__":
     for i in range(len(x_g)):
         start = max(0, i - window)
 
-        x_window = x_G[start:i + 1]
-        y_window = y_G[start:i + 1]
+        x_window = x_g[start:i + 1]
+        y_window = y_g[start:i + 1]
 
         amp_ts.append(
             EyeTrackingFramework.amplitude(
@@ -453,7 +431,7 @@ if __name__ == "__main__":
     # ----------------------------------------------------------
 
     sigma_x_ts = (
-        pd.Series(x_G)
+        pd.Series(x_g)
         .rolling(
             window=window,
             min_periods=1
@@ -463,7 +441,7 @@ if __name__ == "__main__":
     )
 
     sigma_y_ts = (
-        pd.Series(y_G)
+        pd.Series(y_g)
         .rolling(
             window=window,
             min_periods=1
@@ -476,18 +454,8 @@ if __name__ == "__main__":
     # Mean velocity
     # ----------------------------------------------------------
 
-    mean_vx_ts = (
-        pd.Series(vx)
-        .rolling(
-            window=window,
-            min_periods=1
-        )
-        .mean()
-        .to_numpy()
-    )
-
-    mean_vy_ts = (
-        pd.Series(vy)
+    mean_v_ts = (
+        pd.Series(v)
         .rolling(
             window=window,
             min_periods=1
@@ -510,129 +478,32 @@ if __name__ == "__main__":
         .to_numpy()
     )
 
-    # ----------------------------------------------------------
-    # Hit cords
-    # ----------------------------------------------------------
-
-    SCREEN = {
-        "center": np.array([0, 0, 3000]),
-
-        # facing towards participant
-        "normal": np.array([0, 0, -1]),
-
-        # local screen axes
-        "u": np.array([1, 0, 0]),  # horizontal
-        "v": np.array([0, 1, 0]),  # vertical
-
-        "width": 1200,  # mm
-        "height": 700  # mm
-    }
-
-    screen_local_x, screen_local_y = (
-        EyeTrackingFramework.local_plane_coordinates(
-            screen_hits,
-            SCREEN["center"],
-            SCREEN["u"],
-            SCREEN["v"]
-        )
-    )
-
-    screen_inside = (
-        EyeTrackingFramework.inside_object(
-            screen_local_x,
-            screen_local_y,
-            SCREEN["width"],
-            SCREEN["height"]
-        )
-    )
-
-    MIROKAI = {
-        "center": np.array([1000, 0, 1500]),
-
-        # example 45° rotation
-        "normal": np.array([
-            -0.7071,
-            0,
-            -0.7071
-        ]),
-
-        # local object axes
-        "u": np.array([
-            0.7071,
-            0,
-            -0.7071
-        ]),
-        "v": np.array([
-            0,
-            1,
-            0
-        ]),
-
-        "width": 600,
-        "height": 500
-    }
-
-    mirokai_local_x, mirokai_local_y = (
-        EyeTrackingFramework.local_plane_coordinates(
-            mirokai_hits,
-            MIROKAI["center"],
-            MIROKAI["u"],
-            MIROKAI["v"]
-        )
-    )
-
-    mirokai_inside = (
-        EyeTrackingFramework.inside_object(
-            mirokai_local_x,
-            mirokai_local_y,
-            MIROKAI["width"],
-            MIROKAI["height"]
-        )
-    )
-
     # ==========================================================
     # EVENT DETECTION
     # ==========================================================
 
-    # ----------------------------------------------------------
-    # Angular eye-in-space coordinates (degrees)
-    # ----------------------------------------------------------
+    # Angular velocity already computed from
+    # Madgwick-corrected world gaze vectors
 
-    x_deg = np.degrees(
-        np.arctan2(
-            x_G,
-            D_Screen
-        )
-    )
-
-    y_deg = np.degrees(
-        np.arctan2(
-            y_G,
-            D_Screen
-        )
-    )
+    speed_deg = np.degrees(v)
 
     # ----------------------------------------------------------
-    # Angular velocity (deg/s)
-    # ----------------------------------------------------------
-
-    vx_deg = np.diff(x_deg) / dt
-    vy_deg = np.diff(y_deg) / dt
-
-    speed_deg = np.sqrt(
-        vx_deg**2 +
-        vy_deg**2
-    )
-
-    # ==========================================================
     # SACCADE DETECTION
-    # ==========================================================
+    # ----------------------------------------------------------
 
-    velocity_threshold = 30.0      # deg/s
-    min_amplitude = 0.75           # deg
-    min_duration = 3               # samples
+    velocity_threshold = 30.0
+    min_duration = 3
 
-    saccade_mask = speed_deg > velocity_threshold
+    saccade_mask = (
+            speed_deg >
+            velocity_threshold
+    )
+
+    labels = np.full(
+        len(v),
+        "Fixation",
+        dtype=object
+    )
 
     saccade_events = []
 
@@ -641,6 +512,7 @@ if __name__ == "__main__":
     for i, val in enumerate(saccade_mask):
 
         if val and start is None:
+
             start = i
 
         elif not val and start is not None:
@@ -648,166 +520,25 @@ if __name__ == "__main__":
             end = i
 
             if end - start >= min_duration:
-
-                amp = np.sqrt(
-                    (
-                        np.max(x_deg[start:end])
-                        -
-                        np.min(x_deg[start:end])
-                    )**2
-                    +
-                    (
-                        np.max(y_deg[start:end])
-                        -
-                        np.min(y_deg[start:end])
-                    )**2
+                saccade_events.append(
+                    (start, end)
                 )
-
-                if amp >= min_amplitude:
-                    saccade_events.append(
-                        (start, end)
-                    )
 
             start = None
 
-    # ==========================================================
-    # SELECT OBJECT OF INTEREST
-    # ==========================================================
+    # Handle saccade reaching end
+    if start is not None:
 
-    target_x = np.where(
-        screen_inside,
-        screen_x,
-        mirokai_x
-    )
+        end = len(saccade_mask)
 
-    target_y = np.where(
-        screen_inside,
-        screen_y,
-        mirokai_y
-    )
+        if end - start >= min_duration:
+            saccade_events.append(
+                (start, end)
+            )
 
-    target_x_deg = np.degrees(
-        np.arctan2(
-            target_x,
-            D_Screen
-        )
-    )
-
-    target_y_deg = np.degrees(
-        np.arctan2(
-            target_y,
-            D_Screen
-        )
-    )
-
-    target_vx = np.diff(
-        target_x_deg
-    ) / dt
-
-    target_vy = np.diff(
-        target_y_deg
-    ) / dt
-
-    target_speed = np.sqrt(
-        target_vx**2 +
-        target_vy**2
-    )
-
-    # ==========================================================
-    # PURSUIT DETECTION
-    # ==========================================================
-
-    direction_similarity = (
-        vx_deg * target_vx
-        +
-        vy_deg * target_vy
-    ) / (
-        speed_deg *
-        target_speed +
-        1e-6
-    )
-
-    pursuit_mask = (
-        (direction_similarity > 0.8)
-        &
-        (speed_deg > 5)
-        &
-        (target_speed > 5)
-    )
-
-    labels = np.full(
-        len(x_G),
-        "Fixation",
-        dtype=object
-    )
-
-    # ----------------------------------------------------------
     # Label saccades
-    # ----------------------------------------------------------
-
     for start, end in saccade_events:
-
         labels[start:end] = "Saccade"
-
-    # ----------------------------------------------------------
-    # Label smooth pursuits
-    # ----------------------------------------------------------
-
-    min_pursuit_samples = 6   # ~100 ms @60 Hz
-
-    start = None
-
-    for i, val in enumerate(pursuit_mask):
-
-        if val and start is None:
-            start = i
-
-        elif not val and start is not None:
-
-            end = i
-
-            if (
-                end - start
-                >=
-                min_pursuit_samples
-            ):
-
-                pursuit_slice = (
-                    labels[start:end]
-                    !=
-                    "Saccade"
-                )
-
-                labels[start:end][
-                    pursuit_slice
-                ] = "SmoothPursuit"
-
-            start = None
-
-    # ----------------------------------------------------------
-    # Pad arrays to dataframe length
-    # ----------------------------------------------------------
-
-    speed_deg_full = np.concatenate(
-        (
-            [np.nan],
-            speed_deg
-        )
-    )
-
-    vx_deg_full = np.concatenate(
-        (
-            [np.nan],
-            vx_deg
-        )
-    )
-
-    vy_deg_full = np.concatenate(
-        (
-            [np.nan],
-            vy_deg
-        )
-    )
 
     # ==========================================================
     # Export all dynamic features
@@ -817,40 +548,33 @@ if __name__ == "__main__":
 
         "timestamp": t[1:],
 
-        "screen_x": screen_x[1:],
-        "screen_y": screen_y[1:],
+        "event": labels,
 
-        "mirokai_x": mirokai_x[1:],
-        "mirokai_y": mirokai_y[1:],
+        # Velocity
+        "angular_velocity": v,
 
+        # Head angles
         "alpha": alpha_ts,
         "beta": beta_ts,
 
-        "vx": vx,
-        "vy": vy,
-
-        "angular_vx": vx_deg_full[1:],
-        "angular_vy": vy_deg_full[1:],
-        "angular_speed": speed_deg_full[1:],
-
+        # Acceleration
         "acceleration": acc_full,
         "mean_acceleration": mean_acc_ts,
 
+        # Distance metrics
         "euclidean_distance": ed,
         "cluster_distance": cluster_dist_ts,
 
+        # Amplitude
         "amplitude": amp_ts,
 
+        # Variability metrics
         "sigma_x": sigma_x_ts,
         "sigma_y": sigma_y_ts,
 
-        "mean_vx": mean_vx_ts,
-        "mean_vy": mean_vy_ts,
+        # Rolling velocity summaries
+        "mean_angular_velocity": mean_v_ts
 
-        "screen_inside": screen_inside[1:],
-        "mirokai_inside": mirokai_inside[1:],
-
-        "event": labels[1:]
     })
 
     timeseries_path = (

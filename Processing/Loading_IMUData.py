@@ -306,7 +306,7 @@ def analyzeParticipant(participantNumber):
 
 allResults = []
 
-for participantNumber in range(1, 7):
+for participantNumber in range(1, 14):
 
     result = analyzeParticipant(participantNumber)
 

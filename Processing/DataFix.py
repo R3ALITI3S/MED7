@@ -1,6 +1,8 @@
 from pathlib import Path
 import pandas as pd
 
+P = 13 # Participant nr
+
 # Folder containing this script (Processing)
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -14,9 +16,9 @@ FIXED_DATA_DIR = PROJECT_DIR / "FixedData"
 FIXED_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # Change this to the actual filename of your raw CSV
-INPUT_FILE = RAW_DATA_DIR / "Participant_6_GZ.csv"
+INPUT_FILE = RAW_DATA_DIR / f"Participant_{P}_GZ.csv"
 
-OUTPUT_FILE = FIXED_DATA_DIR / "Participant_6_GZ_Fixed.csv"
+OUTPUT_FILE = FIXED_DATA_DIR / f"Participant_{P}_GZ_Fixed.csv"
 
 EXPECTED_COLUMNS = [
     "type", "timestamp",
