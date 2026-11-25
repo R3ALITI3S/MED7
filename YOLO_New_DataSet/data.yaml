@@ -1,4 +1,5 @@
 train: ..dataset/train/images
+val: ..dataset/valid/images
 test: ..dataset/test/images
 
 nc: 2

@@ -1,19 +1,22 @@
 from ultralytics import YOLO
+import torch
+
+print("PyTorch version:", torch.__version__)
+print("PyTorch CUDA version:", torch.version.cuda)
+print("CUDA available:", torch.cuda.is_available())
 
 # Load pretrained YOLO26 detection model
 model = YOLO("yolo26n.pt")
 
 # Train using your MED7 dataset
 results = model.train(
-    data="RobotDataset/data.yaml", # Skal ændres når det rigtige data kommer ind
-    epochs=50,
-    imgsz=640,
+    data=r"E:\dataset", # Skal ændres når det rigtige data kommer ind
+    epochs=2,
+    imgsz=1920,
     batch=8,
     workers=4,
-    device="cpu",       # Use GPU; change to "cpu" if necessary
+    device="0",       # Use GPU; change to "cpu" if necessary
     patience=10,
-    project="MED7_training",
-    name="robot_tv_detection",
     plots=True,
 )
 
