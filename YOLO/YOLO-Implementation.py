@@ -11,7 +11,7 @@ model = YOLO("yolo26n.pt")
 # Train using your MED7 dataset
 results = model.train(
     data="/home/development/Desktop/MED7/MED7/YOLO/dataset/data.yaml",
-    epochs=50,
+    epochs=200,
     imgsz=1920,
     batch=8,
     workers=4,
