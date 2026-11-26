@@ -29,5 +29,3 @@ test_metrics = model.val(
 )
 
 print("Training completed!")
-print("Best model saved at:")
-print("MED7_training/robot_tv_detection/weights/best.pt")
