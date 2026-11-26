@@ -15,18 +15,15 @@ There is probably one better way for doing this.
 # connect to the glasses
 HOSTNAME = "192.168.75.51"
 
-# Path to the pretrained model
-MODEL_PATH = "my_training/custom_segmentation/weights/best.pt"
-
 # YOLO configuration
-IMAGE_SIZE = 640
-CONFIDENCE = 0.5
+IMAGE_SIZE = 1920
+CONFIDENCE = 0.2
 
 # Use GPU if available, otherwise CPU
 DEVICE = 0 if torch.cuda.is_available() else "cpu"
 
 print("Loading custom YOLO segmentation model...")
-model = YOLO(r"C:\Users\nield\Desktop\GitHub\MED7\runs\detect\MED7_training\robot_tv_detection\weights\best.pt")
+model = YOLO(r"C:\Users\nield\Desktop\GitHub\MED7\runs\detect\train\weights\best.pt")
 
 # Just prints
 print("Model loaded successfully! ;)")
