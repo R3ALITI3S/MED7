@@ -16,7 +16,7 @@ count, success = 0, True
 
 while success:
     success, image = vid.read()
-    if success:
+    if success: 
         cv2.imwrite(
             str(output_folder / f"frame_{count:06d}_P{P}.jpg"),
             image
