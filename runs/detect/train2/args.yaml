@@ -2,7 +2,7 @@ task: detect
 mode: train
 model: yolo26n.pt
 data: /home/development/Desktop/MED7/MED7/YOLO/dataset/data.yaml
-epochs: 400
+epochs: 10
 time: null
 patience: 10
 batch: 8
