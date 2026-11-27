@@ -13,7 +13,7 @@ There is probably one better way for doing this.
 '''
 
 # connect to the glasses
-HOSTNAME = "192.168.75.51"
+HOSTNAME = "192.168.0.150" #new http://192.168.0.150/ # old 192.168.75.51
 
 # YOLO configuration
 IMAGE_SIZE = 1920
@@ -23,7 +23,7 @@ CONFIDENCE = 0.2
 DEVICE = 0 if torch.cuda.is_available() else "cpu"
 
 print("Loading custom YOLO segmentation model...")
-model = YOLO(r"C:\Users\nield\Desktop\GitHub\MED7\runs\detect\train\weights\best.pt")
+model = YOLO(r"C:\Users\nield\Desktop\GitHub\MED7\runs\detect\train3\weights\best.pt")
 
 # Just prints
 print("Model loaded successfully! ;)")
