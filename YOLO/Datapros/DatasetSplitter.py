@@ -4,7 +4,7 @@ import shutil
 import random
 
 # Dataset paths
-input_dir = r"/media/development/381C-5D24" # path change
+input_dir = r"E:\dataset" # path change
 
 image_dir = os.path.join(input_dir, "images")
 label_dir = os.path.join(input_dir, "labels")
